@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: tombojava
+
+tombojava:
+  cli:
+    enabled: false
+  output-dir: out
+  max-series-attempts-default: 5000
