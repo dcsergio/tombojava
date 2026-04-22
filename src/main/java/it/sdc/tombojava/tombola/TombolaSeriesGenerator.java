@@ -5,7 +5,6 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Random;
 
@@ -17,70 +16,25 @@ public class TombolaSeriesGenerator {
     private static final int CARDS_PER_SERIES = 6;
     private static final int ROWS_PER_SERIES = ROWS_PER_CARD * CARDS_PER_SERIES;
     private static final int NUMBERS_PER_ROW = 5;
+    private static final int TOTAL_NUMBERS = ROWS_PER_SERIES * NUMBERS_PER_ROW;
+    private static final int MAX_PERMUTATION_ATTEMPTS = 20_000;
 
     public TombolaSeries generateSeries(Random random) {
-        boolean[][] slotLayout = buildSlots(random);
-        List<List<Integer>> columnPools = buildColumnPools(random);
-        List<TombolaCard> cards = buildCards(slotLayout, columnPools);
-
-        return new TombolaSeries(cards);
-    }
-
-    private List<TombolaCard> buildCards(boolean[][] slotLayout, List<List<Integer>> columnPools) {
-        List<TombolaCard> cards = new ArrayList<>(CARDS_PER_SERIES);
-        for (int cardIndex = 0; cardIndex < CARDS_PER_SERIES; cardIndex++) {
-            cards.add(new TombolaCard(buildCardMatrix(cardIndex, slotLayout, columnPools)));
-        }
-        return cards;
-    }
-
-    private int[][] buildCardMatrix(int cardIndex, boolean[][] slotLayout, List<List<Integer>> columnPools) {
-        int[][] cardMatrix = new int[ROWS_PER_CARD][9];
-        for (int columnIndex = 0; columnIndex < 9; columnIndex++) {
-            List<Integer> numbersForColumn = takeColumnNumbers(cardIndex, columnIndex, slotLayout, columnPools);
-            placeSortedColumnNumbers(cardIndex, columnIndex, slotLayout, cardMatrix, numbersForColumn);
-        }
-        return cardMatrix;
-    }
-
-    private List<Integer> takeColumnNumbers(
-            int cardIndex,
-            int columnIndex,
-            boolean[][] slotLayout,
-            List<List<Integer>> columnPools
-    ) {
-        List<Integer> numbersForColumn = new ArrayList<>();
-        for (int rowIndex = 0; rowIndex < ROWS_PER_CARD; rowIndex++) {
-            int globalRow = cardIndex * ROWS_PER_CARD + rowIndex;
-            if (slotLayout[globalRow][columnIndex]) {
-                numbersForColumn.add(columnPools.get(columnIndex).removeFirst());
+        for (int attempt = 1; attempt <= MAX_PERMUTATION_ATTEMPTS; attempt++) {
+            int[] permutation = tryBuildValidPermutation(random);
+            if (permutation != null) {
+                return materializeSeries(permutation);
             }
         }
-        return numbersForColumn;
+        throw new IllegalStateException("Unable to generate a valid series permutation");
     }
 
-    private void placeSortedColumnNumbers(
-            int cardIndex,
-            int columnIndex,
-            boolean[][] slotLayout,
-            int[][] cardMatrix,
-            List<Integer> numbersForColumn
-    ) {
-        Collections.sort(numbersForColumn);
-        int nextNumberIndex = 0;
-        for (int rowIndex = 0; rowIndex < ROWS_PER_CARD; rowIndex++) {
-            int globalRow = cardIndex * ROWS_PER_CARD + rowIndex;
-            if (slotLayout[globalRow][columnIndex]) {
-                cardMatrix[rowIndex][columnIndex] = numbersForColumn.get(nextNumberIndex++);
-            }
-        }
-    }
-
-    public void generateSeriesBatch(Random random, int seriesCount) {
+    public List<TombolaSeries> generateSeriesBatch(Random random, int seriesCount) {
         GenerationResult result = generateSeriesBatch(random, new GenerationRequest(seriesCount, MAX_BATCH_RETRIES_PER_SERIES, 0L));
         if (!result.successful()) {
             throw new IllegalStateException(result.message());
         }
+        return result.series();
     }
 
     public GenerationResult generateSeriesBatch(Random random, GenerationRequest request) {
@@ -225,7 +179,7 @@ public class TombolaSeriesGenerator {
         }
         double ratio = seriesProgress / request.seriesCount();
         int value = (int) Math.floor(ratio * 90.0);
-        return Math.clamp(value, 0, 90);
+        return Math.max(0, Math.min(90, value));
     }
 
     private void emitProgress(ProgressListener listener, int percent, String message) {
@@ -261,118 +215,156 @@ public class TombolaSeriesGenerator {
         return message.toString();
     }
 
-    private boolean[][] buildSlots(Random random) {
-        int[] colRemaining = new int[9];
-        Arrays.fill(colRemaining, 10);
-        boolean[][] slots = new boolean[ROWS_PER_SERIES][9];
+    private int[] tryBuildValidPermutation(Random random) {
+        int[] remainingNumbers = initialNumbers();
+        int[] permutation = new int[TOTAL_NUMBERS];
+        int[] rowWeightedMask = new int[ROWS_PER_SERIES];
+        int[] rowFilledCount = new int[ROWS_PER_SERIES];
+        int remainingCount = TOTAL_NUMBERS;
 
-        if (!fillRow(0, colRemaining, slots, random)) {
-            throw new IllegalStateException("Unable to generate a valid slot layout for the series");
-        }
-        return slots;
-    }
-
-    private boolean fillRow(int rowIndex, int[] colRemaining, boolean[][] slots, Random random) {
-        if (rowIndex == ROWS_PER_SERIES) {
-            return allColumnsConsumed(colRemaining);
-        }
-
-        List<Integer> availableColumns = new ArrayList<>();
-        for (int col = 0; col < 9; col++) {
-            if (colRemaining[col] > 0) {
-                availableColumns.add(col);
-            }
-        }
-        if (availableColumns.size() < 5) {
-            return false;
-        }
-
-        List<int[]> combinations = combinationsOfFive(availableColumns);
-        Collections.shuffle(combinations, random);
-
-        for (int[] pick : combinations) {
-            applyPick(rowIndex, pick, slots, colRemaining);
-
-            int rowsLeft = ROWS_PER_SERIES - (rowIndex + 1);
-            boolean feasible = isFeasible(colRemaining, rowsLeft);
-
-            if (feasible && fillRow(rowIndex + 1, colRemaining, slots, random)) {
-                return true;
+        for (int index = 0; index < TOTAL_NUMBERS; index++) {
+            int row = index / NUMBERS_PER_ROW;
+            int pickIndex = pickEligibleIndex(remainingNumbers, remainingCount, rowWeightedMask[row], random);
+            if (pickIndex < 0) {
+                return null;
             }
 
-            rollbackPick(rowIndex, pick, slots, colRemaining);
-        }
+            int number = remainingNumbers[pickIndex];
+            permutation[index] = number;
+            rowWeightedMask[row] += columnWeight(number);
+            rowFilledCount[row]++;
 
-        return false;
-    }
+            remainingCount--;
+            remainingNumbers[pickIndex] = remainingNumbers[remainingCount];
 
-    private boolean allColumnsConsumed(int[] colRemaining) {
-        for (int value : colRemaining) {
-            if (value != 0) {
-                return false;
+            if (!isStillFeasible(remainingNumbers, remainingCount, rowWeightedMask, rowFilledCount)) {
+                return null;
             }
         }
-        return true;
+
+        return permutation;
     }
 
-    private void applyPick(int rowIndex, int[] pick, boolean[][] slots, int[] colRemaining) {
-        for (int col : pick) {
-            slots[rowIndex][col] = true;
-            colRemaining[col]--;
+    private int[] initialNumbers() {
+        int[] numbers = new int[TOTAL_NUMBERS];
+        for (int value = 1; value <= TOTAL_NUMBERS; value++) {
+            numbers[value - 1] = value;
         }
+        return numbers;
     }
 
-    private void rollbackPick(int rowIndex, int[] pick, boolean[][] slots, int[] colRemaining) {
-        for (int col : pick) {
-            slots[rowIndex][col] = false;
-            colRemaining[col]++;
-        }
-    }
-
-    private boolean isFeasible(int[] colRemaining, int rowsLeft) {
-        for (int remaining : colRemaining) {
-            if (remaining < 0 || remaining > rowsLeft) {
-                return false;
+    private int pickEligibleIndex(int[] remainingNumbers, int remainingCount, int rowMask, Random random) {
+        int[] eligibleIndexes = new int[remainingCount];
+        int eligibleCount = 0;
+        for (int index = 0; index < remainingCount; index++) {
+            int weight = columnWeight(remainingNumbers[index]);
+            if ((rowMask & weight) == 0) {
+                eligibleIndexes[eligibleCount++] = index;
             }
         }
-        return true;
+        if (eligibleCount == 0) {
+            return -1;
+        }
+        return eligibleIndexes[random.nextInt(eligibleCount)];
     }
 
-    private List<int[]> combinationsOfFive(List<Integer> values) {
-        List<int[]> combinations = new ArrayList<>();
-        for (int a = 0; a < values.size() - 4; a++) {
-            for (int b = a + 1; b < values.size() - 3; b++) {
-                for (int c = b + 1; c < values.size() - 2; c++) {
-                    for (int d = c + 1; d < values.size() - 1; d++) {
-                        for (int e = d + 1; e < values.size(); e++) {
-                            combinations.add(new int[]{
-                                    values.get(a),
-                                    values.get(b),
-                                    values.get(c),
-                                    values.get(d),
-                                    values.get(e)
-                            });
-                        }
-                    }
+    private boolean isStillFeasible(
+            int[] remainingNumbers,
+            int remainingCount,
+            int[] rowWeightedMask,
+            int[] rowFilledCount
+    ) {
+        int[] remainingByColumn = new int[9];
+        for (int index = 0; index < remainingCount; index++) {
+            remainingByColumn[columnOf(remainingNumbers[index])]++;
+        }
+
+        for (int row = 0; row < ROWS_PER_SERIES; row++) {
+            int slotsLeftInRow = NUMBERS_PER_ROW - rowFilledCount[row];
+            if (slotsLeftInRow <= 0) {
+                continue;
+            }
+
+            int distinctColumnsAvailable = 0;
+            for (int col = 0; col < 9; col++) {
+                int weight = 1 << col;
+                if (remainingByColumn[col] > 0 && (rowWeightedMask[row] & weight) == 0) {
+                    distinctColumnsAvailable++;
                 }
             }
+            if (distinctColumnsAvailable < slotsLeftInRow) {
+                return false;
+            }
         }
-        return combinations;
+
+        for (int col = 0; col < 9; col++) {
+            int compatibleRows = 0;
+            int weight = 1 << col;
+            for (int row = 0; row < ROWS_PER_SERIES; row++) {
+                int slotsLeftInRow = NUMBERS_PER_ROW - rowFilledCount[row];
+                if (slotsLeftInRow > 0 && (rowWeightedMask[row] & weight) == 0) {
+                    compatibleRows++;
+                }
+            }
+            if (remainingByColumn[col] > compatibleRows) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
-    private List<List<Integer>> buildColumnPools(Random random) {
-        List<List<Integer>> pools = new ArrayList<>(9);
-        for (int col = 0; col < 9; col++) {
-            int start = col * 10 + 1;
-            List<Integer> numbers = new ArrayList<>(10);
-            for (int value = start; value < start + 10; value++) {
-                numbers.add(value);
+    private TombolaSeries materializeSeries(int[] permutation) {
+        List<TombolaCard> cards = new ArrayList<>(CARDS_PER_SERIES);
+        for (int cardIndex = 0; cardIndex < CARDS_PER_SERIES; cardIndex++) {
+            int[][] card = new int[ROWS_PER_CARD][9];
+            for (int row = 0; row < ROWS_PER_CARD; row++) {
+                int globalRow = cardIndex * ROWS_PER_CARD + row;
+                int start = globalRow * NUMBERS_PER_ROW;
+                for (int offset = 0; offset < NUMBERS_PER_ROW; offset++) {
+                    int number = permutation[start + offset];
+                    int column = columnOf(number);
+                    card[row][column] = number;
+                }
             }
-            Collections.shuffle(numbers, random);
-            pools.add(numbers);
+            sortColumnsAscending(card);
+            cards.add(new TombolaCard(card));
         }
-        return pools;
+        return new TombolaSeries(cards);
     }
+
+    private void sortColumnsAscending(int[][] card) {
+        for (int col = 0; col < 9; col++) {
+            int count = 0;
+            int[] values = new int[ROWS_PER_CARD];
+            int[] rowIndexes = new int[ROWS_PER_CARD];
+            for (int row = 0; row < ROWS_PER_CARD; row++) {
+                if (card[row][col] != 0) {
+                    rowIndexes[count] = row;
+                    values[count++] = card[row][col];
+                }
+            }
+            Arrays.sort(values, 0, count);
+            for (int index = 0; index < count; index++) {
+                card[rowIndexes[index]][col] = values[index];
+            }
+        }
+    }
+
+    private int columnWeight(int number) {
+        return 1 << columnOf(number);
+    }
+
+    static int columnOf(int number) {
+        if (number < 1 || number > 90) {
+            throw new IllegalArgumentException("Number out of range: " + number);
+        }
+        if (number == 90) {
+            return 8;
+        }
+        return number / 10;
+    }
+
 
     private List<RowData> extractRows(TombolaSeries series, int seriesNumber) {
         List<RowData> rows = new ArrayList<>(ROWS_PER_SERIES);

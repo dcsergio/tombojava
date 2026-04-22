@@ -35,7 +35,7 @@ class TombolaSeriesGeneratorTests {
                     }
 
                     numbersInRow++;
-                    int expectedCol = (value - 1) / 10;
+                    int expectedCol = TombolaSeriesGenerator.columnOf(value);
                     assertEquals(expectedCol, col, "Each number must stay in its decade column");
 
                     assertTrue(value >= 1 && value <= 90, "Numbers must be in range 1..90");
@@ -47,9 +47,24 @@ class TombolaSeriesGeneratorTests {
         }
 
         assertEquals(90, allNumbers.size(), "A series must use all numbers 1..90 without repetition");
-        for (int col = 0; col < 9; col++) {
-            assertEquals(10, perColumnCount[col], "Each column must contribute 10 numbers in the series");
+        assertEquals(9, perColumnCount[0], "Column 0 must contain numbers 1..9");
+        for (int col = 1; col < 8; col++) {
+            assertEquals(10, perColumnCount[col], "Middle columns must contribute 10 numbers in the series");
         }
+        assertEquals(11, perColumnCount[8], "Last column must contain numbers 80..90");
+    }
+
+    @Test
+    void decadeColumnMappingHandlesBoundaryValues() {
+        assertEquals(0, TombolaSeriesGenerator.columnOf(1));
+        assertEquals(0, TombolaSeriesGenerator.columnOf(9));
+        assertEquals(1, TombolaSeriesGenerator.columnOf(10));
+        assertEquals(1, TombolaSeriesGenerator.columnOf(19));
+        assertEquals(2, TombolaSeriesGenerator.columnOf(20));
+        assertEquals(7, TombolaSeriesGenerator.columnOf(79));
+        assertEquals(8, TombolaSeriesGenerator.columnOf(80));
+        assertEquals(8, TombolaSeriesGenerator.columnOf(89));
+        assertEquals(8, TombolaSeriesGenerator.columnOf(90));
     }
 
     @Test
