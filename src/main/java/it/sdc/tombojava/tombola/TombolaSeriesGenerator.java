@@ -19,41 +19,68 @@ public class TombolaSeriesGenerator {
     private static final int NUMBERS_PER_ROW = 5;
 
     public TombolaSeries generateSeries(Random random) {
-        boolean[][] slots = buildSlots(random);
+        boolean[][] slotLayout = buildSlots(random);
         List<List<Integer>> columnPools = buildColumnPools(random);
-
-        List<TombolaCard> cards = new ArrayList<>(CARDS_PER_SERIES);
-        for (int cardIndex = 0; cardIndex < CARDS_PER_SERIES; cardIndex++) {
-            int[][] card = new int[ROWS_PER_CARD][9];
-            for (int col = 0; col < 9; col++) {
-                List<Integer> numbersForColumn = new ArrayList<>();
-                for (int row = 0; row < ROWS_PER_CARD; row++) {
-                    int globalRow = cardIndex * ROWS_PER_CARD + row;
-                    if (slots[globalRow][col]) {
-                        numbersForColumn.add(columnPools.get(col).removeFirst());
-                    }
-                }
-                Collections.sort(numbersForColumn);
-                int pos = 0;
-                for (int row = 0; row < ROWS_PER_CARD; row++) {
-                    int globalRow = cardIndex * ROWS_PER_CARD + row;
-                    if (slots[globalRow][col]) {
-                        card[row][col] = numbersForColumn.get(pos++);
-                    }
-                }
-            }
-            cards.add(new TombolaCard(card));
-        }
+        List<TombolaCard> cards = buildCards(slotLayout, columnPools);
 
         return new TombolaSeries(cards);
     }
 
-    public List<TombolaSeries> generateSeriesBatch(Random random, int seriesCount) {
+    private List<TombolaCard> buildCards(boolean[][] slotLayout, List<List<Integer>> columnPools) {
+        List<TombolaCard> cards = new ArrayList<>(CARDS_PER_SERIES);
+        for (int cardIndex = 0; cardIndex < CARDS_PER_SERIES; cardIndex++) {
+            cards.add(new TombolaCard(buildCardMatrix(cardIndex, slotLayout, columnPools)));
+        }
+        return cards;
+    }
+
+    private int[][] buildCardMatrix(int cardIndex, boolean[][] slotLayout, List<List<Integer>> columnPools) {
+        int[][] cardMatrix = new int[ROWS_PER_CARD][9];
+        for (int columnIndex = 0; columnIndex < 9; columnIndex++) {
+            List<Integer> numbersForColumn = takeColumnNumbers(cardIndex, columnIndex, slotLayout, columnPools);
+            placeSortedColumnNumbers(cardIndex, columnIndex, slotLayout, cardMatrix, numbersForColumn);
+        }
+        return cardMatrix;
+    }
+
+    private List<Integer> takeColumnNumbers(
+            int cardIndex,
+            int columnIndex,
+            boolean[][] slotLayout,
+            List<List<Integer>> columnPools
+    ) {
+        List<Integer> numbersForColumn = new ArrayList<>();
+        for (int rowIndex = 0; rowIndex < ROWS_PER_CARD; rowIndex++) {
+            int globalRow = cardIndex * ROWS_PER_CARD + rowIndex;
+            if (slotLayout[globalRow][columnIndex]) {
+                numbersForColumn.add(columnPools.get(columnIndex).removeFirst());
+            }
+        }
+        return numbersForColumn;
+    }
+
+    private void placeSortedColumnNumbers(
+            int cardIndex,
+            int columnIndex,
+            boolean[][] slotLayout,
+            int[][] cardMatrix,
+            List<Integer> numbersForColumn
+    ) {
+        Collections.sort(numbersForColumn);
+        int nextNumberIndex = 0;
+        for (int rowIndex = 0; rowIndex < ROWS_PER_CARD; rowIndex++) {
+            int globalRow = cardIndex * ROWS_PER_CARD + rowIndex;
+            if (slotLayout[globalRow][columnIndex]) {
+                cardMatrix[rowIndex][columnIndex] = numbersForColumn.get(nextNumberIndex++);
+            }
+        }
+    }
+
+    public void generateSeriesBatch(Random random, int seriesCount) {
         GenerationResult result = generateSeriesBatch(random, new GenerationRequest(seriesCount, MAX_BATCH_RETRIES_PER_SERIES, 0L));
         if (!result.successful()) {
             throw new IllegalStateException(result.message());
         }
-        return result.series();
     }
 
     public GenerationResult generateSeriesBatch(Random random, GenerationRequest request) {
@@ -198,7 +225,7 @@ public class TombolaSeriesGenerator {
         }
         double ratio = seriesProgress / request.seriesCount();
         int value = (int) Math.floor(ratio * 90.0);
-        return Math.max(0, Math.min(90, value));
+        return Math.clamp(value, 0, 90);
     }
 
     private void emitProgress(ProgressListener listener, int percent, String message) {
