@@ -3,6 +3,9 @@
     const form = document.getElementById('generateForm');
     const openModalBtn = document.getElementById('openModalBtn');
     const cancelBtn = document.getElementById('cancelBtn');
+    const verifyDialog = document.getElementById('verifyDialog');
+    const openVerifyModalBtn = document.getElementById('openVerifyModalBtn');
+    const closeVerifyDialogBtn = document.getElementById('closeVerifyDialogBtn');
     const progressWrap = document.getElementById('progressWrap');
     const jobProgress = document.getElementById('jobProgress');
     const jobStatus = document.getElementById('jobStatus');
@@ -28,6 +31,17 @@
         dialog.close();
     });
 
+    openVerifyModalBtn.addEventListener('click', function () {
+        if (!currentJobId) {
+            return;
+        }
+        verifyDialog.showModal();
+    });
+
+    closeVerifyDialogBtn.addEventListener('click', function () {
+        verifyDialog.close();
+    });
+
     form.addEventListener('submit', async function (event) {
         event.preventDefault();
 
@@ -39,6 +53,11 @@
         const seedValue = document.getElementById('seed').value.trim();
         if (seedValue) {
             payload.seed = Number(seedValue);
+        }
+
+        const maxAttemptsValue = document.getElementById('maxSeriesAttempts').value.trim();
+        if (maxAttemptsValue) {
+            payload.maxSeriesAttempts = Number(maxAttemptsValue);
         }
 
         try {
@@ -89,7 +108,7 @@
                     clearInterval(pollHandle);
                     pollHandle = null;
                     downloadWrap.innerHTML = '<a href="' + status.downloadUrl + '">Scarica ' + status.fileName + '</a>';
-                    gameWrap.style.display = 'block';
+                    gameWrap.classList.add('is-visible');
                     verifySeriesNumber.max = String(status.seriesCount || 1);
                     verifySeriesNumber.value = '1';
                 } else if (status.state === 'FAILED') {
@@ -163,7 +182,10 @@
 
     function resetGameState() {
         extractedNumbers.clear();
-        gameWrap.style.display = 'none';
+        gameWrap.classList.remove('is-visible');
+        if (verifyDialog.open) {
+            verifyDialog.close();
+        }
         verifyMessage.textContent = '';
         verifyResult.innerHTML = '';
         numbersBoard.querySelectorAll('.board-btn').forEach(function (button) {

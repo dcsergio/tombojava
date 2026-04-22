@@ -3,7 +3,8 @@ package it.sdc.tombojava.web;
 public record StartGenerationRequest(
         Integer seriesCount,
         Long seed,
-        Integer maxWaitSeconds
+        Integer maxWaitSeconds,
+        Integer maxSeriesAttempts
 ) {
 
     public void validate() {
@@ -12,6 +13,9 @@ public record StartGenerationRequest(
         }
         if (maxWaitSeconds == null || maxWaitSeconds < 1) {
             throw new IllegalArgumentException("Il tempo massimo di attesa deve essere un intero positivo (secondi)");
+        }
+        if (maxSeriesAttempts != null && maxSeriesAttempts < 1) {
+            throw new IllegalArgumentException("Il numero massimo di tentativi deve essere un intero positivo");
         }
     }
 }

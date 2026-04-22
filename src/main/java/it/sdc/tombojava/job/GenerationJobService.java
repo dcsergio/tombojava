@@ -49,13 +49,17 @@ public class GenerationJobService {
         this.jobs = new ConcurrentHashMap<>();
     }
 
-    public String startJob(int seriesCount, Long seed, int maxWaitSeconds) {
+    public String startJob(int seriesCount, Long seed, int maxWaitSeconds, Integer maxSeriesAttempts) {
         if (seriesCount < 1) {
             throw new IllegalArgumentException("seriesCount must be a positive integer");
         }
         if (maxWaitSeconds < 1) {
             throw new IllegalArgumentException("maxWaitSeconds must be a positive integer");
         }
+
+        int resolvedMaxAttempts = (maxSeriesAttempts != null && maxSeriesAttempts > 0)
+                ? maxSeriesAttempts
+                : defaultMaxAttemptsPerSeries;
 
         long resolvedSeed = seed != null ? seed : ThreadLocalRandom.current().nextLong();
         String jobId = UUID.randomUUID().toString();
@@ -66,7 +70,7 @@ public class GenerationJobService {
             throw new IllegalArgumentException("Invalid output path");
         }
 
-        JobRuntimeState state = new JobRuntimeState(jobId, resolvedSeed, seriesCount, fileName, outputPath);
+        JobRuntimeState state = new JobRuntimeState(jobId, resolvedSeed, seriesCount, fileName, outputPath, resolvedMaxAttempts);
         jobs.put(jobId, state);
         executor.submit(() -> runJob(state, maxWaitSeconds));
 
@@ -117,7 +121,7 @@ public class GenerationJobService {
         try {
             Files.createDirectories(outputDir);
 
-            GenerationRequest request = new GenerationRequest(state.seriesCount, defaultMaxAttemptsPerSeries, state.seed);
+            GenerationRequest request = new GenerationRequest(state.seriesCount, state.maxSeriesAttempts, state.seed);
             GenerationResult result = generator.generateSeriesBatch(
                     new Random(state.seed),
                     request,
@@ -152,18 +156,20 @@ public class GenerationJobService {
         private final int seriesCount;
         private final String fileName;
         private final Path outputPath;
+        private final int maxSeriesAttempts;
 
         private volatile JobState state;
         private volatile int progress;
         private volatile String message;
         private volatile List<TombolaSeries> generatedSeries;
 
-        private JobRuntimeState(String jobId, long seed, int seriesCount, String fileName, Path outputPath) {
+        private JobRuntimeState(String jobId, long seed, int seriesCount, String fileName, Path outputPath, int maxSeriesAttempts) {
             this.jobId = jobId;
             this.seed = seed;
             this.seriesCount = seriesCount;
             this.fileName = fileName;
             this.outputPath = outputPath;
+            this.maxSeriesAttempts = maxSeriesAttempts;
             this.state = JobState.PENDING;
             this.progress = 0;
             this.message = "In coda";

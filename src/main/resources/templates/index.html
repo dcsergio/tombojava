@@ -3,11 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Generatore Tombojava Tombola</title>
+    <title>Tombojava</title>
     <style>
-        body { font-family: Arial, sans-serif; margin: 2rem; }
-        .container { max-width: 720px; margin: 0 auto; }
-        .primary { background: #1e40af; color: #fff; border: 0; padding: .75rem 1rem; border-radius: 8px; cursor: pointer; }
+        html, body { height: 100%; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 1.25rem; box-sizing: border-box; }
+        .container { max-width: none; width: 100%; margin: 0; min-height: calc(100vh - 2.5rem); display: flex; flex-direction: column; }
+        .primary { background: #1e40af; color: #fff; border: 0; padding: .75rem 1rem; border-radius: 8px; cursor: pointer; display: inline-block; align-self: flex-start; }
         dialog { border: 0; border-radius: 10px; padding: 1rem; width: 360px; }
         dialog::backdrop { background: rgba(0, 0, 0, 0.35); }
         label { display: block; margin-top: .75rem; font-size: .9rem; }
@@ -18,25 +19,35 @@
         progress { width: 100%; height: 20px; }
         .status { margin-top: .5rem; color: #1f2937; }
         .download { margin-top: .8rem; }
-        .game-wrap { margin-top: 1.5rem; display: none; }
-        .board { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: .35rem; margin-top: .75rem; }
-        .board-btn { padding: .45rem 0; border: 1px solid #9ca3af; background: #fff; border-radius: 6px; cursor: pointer; }
+        .game-wrap { margin-top: 1.5rem; display: none; flex: 1; min-height: 0; }
+        .game-wrap.is-visible { display: flex; }
+        .board-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+        .board-header { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+        .board-header h2 { margin: 0; }
+        .board-panel p { margin: .4rem 0 0; }
+        .board { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); grid-template-rows: repeat(9, minmax(0, 1fr)); gap: .4rem; margin-top: .75rem; flex: 1; min-height: 360px; }
+        .board-btn { width: 100%; height: 100%; border: 1px solid #9ca3af; background: #fff; border-radius: 6px; cursor: pointer; font-size: clamp(.85rem, 1.2vw, 1.1rem); }
         .board-btn.is-drawn { background: #f59e0b; color: #111827; border-color: #d97706; font-weight: bold; }
-        .verify-controls { display: flex; gap: .5rem; margin-top: 1rem; align-items: end; }
-        .verify-controls .field { flex: 0 0 180px; }
-        .cards-wrap { margin-top: 1rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+        #verifyDialog { width: min(900px, calc(100vw - 2rem)); max-height: calc(100vh - 2rem); overflow: auto; }
+        .verify-controls { display: flex; gap: .5rem; margin-top: .75rem; align-items: end; }
+        .verify-controls .field { flex: 1; }
+        .cards-wrap { margin-top: .75rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .75rem; }
         .card { border: 1px solid #d1d5db; border-radius: 8px; padding: .5rem; }
         .card-title { font-size: .9rem; margin-bottom: .4rem; color: #374151; }
         .card-grid { border-collapse: collapse; width: 100%; table-layout: fixed; }
         .card-grid td { border: 1px solid #d1d5db; text-align: center; height: 28px; font-size: .9rem; }
         .card-grid td.drawn { background: #fde68a; font-weight: bold; }
         .verify-message { margin-top: .5rem; color: #374151; }
+        @media (max-width: 768px) {
+            body { padding: .75rem; }
+            .container { min-height: calc(100vh - 1.5rem); }
+            .board { min-height: 300px; gap: .3rem; }
+        }
     </style>
 </head>
 <body>
 <div class="container">
-    <h1>Tombojava Tombola</h1>
-    <p>Genera il PDF delle cartelle con processo in background.</p>
+    <h1>TomboJava</h1>
     <button id="openModalBtn" class="primary" type="button">Genera cartelle</button>
 
     <div id="progressWrap" class="progress-wrap">
@@ -46,20 +57,14 @@
     </div>
 
     <div id="gameWrap" class="game-wrap">
-        <h2>Tabellone</h2>
-        <p>Clicca i numeri estratti per marcarli.</p>
-        <div id="numbersBoard" class="board"></div>
-
-        <div class="verify-controls">
-            <div class="field">
-                <label for="verifySeriesNumber">Numero serie da verificare</label>
-                <input id="verifySeriesNumber" type="number" min="1" value="1" required>
+        <section class="board-panel">
+            <div class="board-header">
+                <h2>Tabellone</h2>
+                <button id="openVerifyModalBtn" class="secondary" type="button">Apri verifica</button>
             </div>
-            <button id="verifySeriesBtn" class="primary" type="button">Verifica</button>
-        </div>
-
-        <div id="verifyMessage" class="verify-message"></div>
-        <div id="verifyResult" class="cards-wrap"></div>
+            <p>Clicca i numeri estratti per marcarli.</p>
+            <div id="numbersBoard" class="board"></div>
+        </section>
     </div>
 </div>
 
@@ -75,11 +80,34 @@
         <label for="maxWaitSeconds">Tempo massimo attesa (secondi)</label>
         <input id="maxWaitSeconds" name="maxWaitSeconds" type="number" min="1" value="30" required>
 
+        <label for="maxSeriesAttempts">Tentativi massimi per serie (opzionale)</label>
+        <input id="maxSeriesAttempts" name="maxSeriesAttempts" type="number" min="1" placeholder="es. 5000">
+
         <div class="actions">
             <button id="cancelBtn" type="button" class="secondary">Annulla</button>
             <button type="submit" class="primary">Avvia</button>
         </div>
     </form>
+</dialog>
+
+<dialog id="verifyDialog">
+    <div>
+        <h3>Verifica cartelle</h3>
+        <div class="verify-controls">
+            <div class="field">
+                <label for="verifySeriesNumber">Numero serie da verificare</label>
+                <input id="verifySeriesNumber" type="number" min="1" value="1" required>
+            </div>
+            <button id="verifySeriesBtn" class="primary" type="button">Verifica</button>
+        </div>
+
+        <div id="verifyMessage" class="verify-message"></div>
+        <div id="verifyResult" class="cards-wrap"></div>
+
+        <div class="actions">
+            <button id="closeVerifyDialogBtn" type="button" class="secondary">Chiudi</button>
+        </div>
+    </div>
 </dialog>
 
 <script src="/js/job-polling.js"></script>

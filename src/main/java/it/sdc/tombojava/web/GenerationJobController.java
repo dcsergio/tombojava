@@ -36,7 +36,7 @@ public class GenerationJobController {
     public ResponseEntity<StartGenerationResponse> start(@RequestBody StartGenerationRequest request) {
         try {
             request.validate();
-            String jobId = generationJobService.startJob(request.seriesCount(), request.seed(), request.maxWaitSeconds());
+            String jobId = generationJobService.startJob(request.seriesCount(), request.seed(), request.maxWaitSeconds(), request.maxSeriesAttempts());
             return ResponseEntity.status(HttpStatus.ACCEPTED).body(new StartGenerationResponse(jobId));
         } catch (IllegalArgumentException ex) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
