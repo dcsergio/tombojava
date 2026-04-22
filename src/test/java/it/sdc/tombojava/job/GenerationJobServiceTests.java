@@ -36,7 +36,7 @@ class GenerationJobServiceTests {
 
         GenerationJobService service = new GenerationJobService(generator, pdfWriter, "build/tmp", 1000);
         try {
-            String jobId = service.startJob(3, 777L, 5);
+            String jobId = service.startJob(3, 777L, 5, null);
             Optional<GenerationJobStatus> status = service.findStatus(jobId);
 
             assertTrue(status.isPresent());
@@ -61,7 +61,7 @@ class GenerationJobServiceTests {
 
         GenerationJobService service = new GenerationJobService(generator, pdfWriter, "build/tmp", 1000);
         try {
-            String jobId = service.startJob(1, 123L, 5);
+            String jobId = service.startJob(1, 123L, 5, null);
             waitForCompletion(service, jobId);
 
             Optional<TombolaSeries> found = service.findGeneratedSeries(jobId, 1);

@@ -43,3 +43,22 @@ Il runner CLI e' ancora disponibile, ma disabilitato di default. Per abilitarlo:
 Set-Location "C:\Users\sergi\workspace\tombojava"
 .\gradlew.bat test
 ```
+
+## Docker / Render.com
+Build locale dell'immagine:
+```powershell
+Set-Location "C:\Users\sergi\workspace\tombojava"
+docker build -t tombojava .
+```
+
+Esecuzione locale:
+```powershell
+docker run --rm -p 8080:8080 -e PORT=8080 tombojava
+```
+
+Note per Render:
+- usa il `Dockerfile` in root per build e startup;
+- Render imposta la variabile `PORT`, che viene inoltrata a Spring Boot;
+- l'output PDF viene scritto di default in `/tmp/tombojava/out` tramite `TOMBOJAVA_OUTPUT_DIR`;
+- se vuoi persistenza oltre il ciclo di vita del container, monta un disco Render e imposta `TOMBOJAVA_OUTPUT_DIR` verso quel path.
+
