@@ -7,3 +7,6 @@ tombojava:
     enabled: false
   output-dir: out
   max-series-attempts-default: 5000
+  history-dir: out/history
+  history-retention-max-jobs: 50
+  history-store-series: true

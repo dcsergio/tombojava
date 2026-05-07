@@ -19,6 +19,28 @@
         progress { width: 100%; height: 20px; }
         .status { margin-top: .5rem; color: #1f2937; }
         .download { margin-top: .8rem; }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 1.5rem; }
+        .panel { border: 1px solid #d1d5db; border-radius: 12px; padding: 1rem; background: #f9fafb; }
+        .panel h2 { margin-top: 0; margin-bottom: .75rem; }
+        .panel-toolbar { display: flex; justify-content: space-between; gap: .75rem; align-items: center; margin-bottom: .75rem; }
+        .muted { color: #6b7280; margin: 0; }
+        .history-list { display: grid; gap: .75rem; }
+        .history-item { border: 1px solid #e5e7eb; background: #fff; border-radius: 10px; padding: .8rem; }
+        .history-item-header { display: flex; justify-content: space-between; gap: .5rem; align-items: center; flex-wrap: wrap; }
+        .history-item-title { font-weight: bold; }
+        .state-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: .2rem .6rem; font-size: .8rem; font-weight: bold; }
+        .state-completed { background: #dcfce7; color: #166534; }
+        .state-failed { background: #fee2e2; color: #991b1b; }
+        .state-running { background: #dbeafe; color: #1d4ed8; }
+        .history-meta { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: .5rem; color: #374151; font-size: .92rem; }
+        .history-actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: .75rem; }
+        .history-actions a { color: #1d4ed8; text-decoration: none; }
+        .stats-summary { color: #374151; margin-bottom: .75rem; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: .75rem; }
+        .stat-card { border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; padding: .85rem; }
+        .stat-card h3 { margin: 0 0 .35rem; font-size: 1rem; }
+        .stat-value { font-size: 1.15rem; font-weight: bold; color: #1e40af; }
+        .stat-card p { margin: .4rem 0 0; color: #4b5563; }
         .game-wrap { margin-top: 1.5rem; display: none; flex: 1; min-height: 0; }
         .game-wrap.is-visible { display: flex; }
         .board-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
@@ -54,6 +76,24 @@
         <progress id="jobProgress" value="0" max="100"></progress>
         <div id="jobStatus" class="status">In attesa...</div>
         <div id="downloadWrap" class="download"></div>
+    </div>
+
+    <div class="dashboard">
+        <section class="panel">
+            <div class="panel-toolbar">
+                <h2>Ultime generazioni</h2>
+                <button id="refreshHistoryBtn" class="secondary" type="button">Aggiorna</button>
+            </div>
+            <div id="historyList" class="history-list">
+                <p class="muted">Nessuna generazione storica disponibile.</p>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Statistiche divertenti</h2>
+            <div id="funStatsSummary" class="stats-summary">Sto raccogliendo i numeri della fortuna...</div>
+            <div id="funStatsList" class="stats-grid"></div>
+        </section>
     </div>
 
     <div id="gameWrap" class="game-wrap">

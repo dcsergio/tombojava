@@ -7,7 +7,9 @@ import it.sdc.tombojava.tombola.TombolaPdfWriter;
 import it.sdc.tombojava.tombola.TombolaSeries;
 import it.sdc.tombojava.tombola.TombolaSeriesGenerator;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
@@ -24,7 +26,7 @@ import static org.mockito.Mockito.when;
 class GenerationJobServiceTests {
 
     @Test
-    void startedJobUsesExpectedFileNamePattern() {
+    void startedJobUsesExpectedFileNamePattern(@TempDir Path tempDir) {
         TombolaSeriesGenerator generator = mock(TombolaSeriesGenerator.class);
         TombolaPdfWriter pdfWriter = mock(TombolaPdfWriter.class);
 
@@ -34,7 +36,7 @@ class GenerationJobServiceTests {
                     return new GenerationResult(request, List.of(), List.of(), 0, null, "failed");
                 });
 
-        GenerationJobService service = new GenerationJobService(generator, pdfWriter, "build/tmp", 1000);
+        GenerationJobService service = new GenerationJobService(generator, pdfWriter, tempDir.toString(), 1000);
         try {
             String jobId = service.startJob(3, 777L, 5, null);
             Optional<GenerationJobStatus> status = service.findStatus(jobId);
@@ -47,7 +49,7 @@ class GenerationJobServiceTests {
     }
 
     @Test
-    void completedJobExposesGeneratedSeriesForVerification() throws Exception {
+    void completedJobExposesGeneratedSeriesForVerification(@TempDir Path tempDir) throws Exception {
         TombolaSeriesGenerator generator = mock(TombolaSeriesGenerator.class);
         TombolaPdfWriter pdfWriter = mock(TombolaPdfWriter.class);
 
@@ -59,7 +61,7 @@ class GenerationJobServiceTests {
                 });
         doNothing().when(pdfWriter).write(any(), any(), any(Long.class));
 
-        GenerationJobService service = new GenerationJobService(generator, pdfWriter, "build/tmp", 1000);
+        GenerationJobService service = new GenerationJobService(generator, pdfWriter, tempDir.toString(), 1000);
         try {
             String jobId = service.startJob(1, 123L, 5, null);
             waitForCompletion(service, jobId);
@@ -71,6 +73,42 @@ class GenerationJobServiceTests {
             assertTrue(service.findGeneratedSeries(jobId, 2).isEmpty());
         } finally {
             service.shutdownExecutor();
+        }
+    }
+
+    @Test
+    void completedJobCanBeRecoveredFromHistoryAfterServiceRestart(@TempDir Path tempDir) throws Exception {
+        TombolaSeriesGenerator generator = mock(TombolaSeriesGenerator.class);
+        TombolaPdfWriter pdfWriter = mock(TombolaPdfWriter.class);
+
+        TombolaSeries series = buildSeries();
+        when(generator.generateSeriesBatch(any(Random.class), any(GenerationRequest.class), any(Duration.class), any()))
+                .thenAnswer(invocation -> {
+                    GenerationRequest request = invocation.getArgument(1);
+                    return new GenerationResult(request, List.of(series), List.of(4), 2, null, "ok");
+                });
+        doNothing().when(pdfWriter).write(any(), any(), any(Long.class));
+
+        String jobId;
+        GenerationJobService firstInstance = new GenerationJobService(generator, pdfWriter, tempDir.toString(), 1000);
+        try {
+            jobId = firstInstance.startJob(1, 123L, 5, null);
+            waitForCompletion(firstInstance, jobId);
+        } finally {
+            firstInstance.shutdownExecutor();
+        }
+
+        GenerationJobService restartedInstance = new GenerationJobService(generator, pdfWriter, tempDir.toString(), 1000);
+        try {
+            Optional<GenerationJobStatus> restoredStatus = restartedInstance.findStatus(jobId);
+            Optional<TombolaSeries> restoredSeries = restartedInstance.findGeneratedSeries(jobId, 1);
+
+            assertTrue(restoredStatus.isPresent());
+            assertEquals(JobState.COMPLETED, restoredStatus.get().state());
+            assertTrue(restoredSeries.isPresent());
+            assertEquals(6, restoredSeries.get().cards().size());
+        } finally {
+            restartedInstance.shutdownExecutor();
         }
     }
 
